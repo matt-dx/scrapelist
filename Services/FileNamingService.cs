@@ -23,7 +23,7 @@ public class FileNamingService
 
     public string GetPlaylistFileName(string playlistTitle)
     {
-        var name = $"~{Sanitize(playlistTitle)}";
+        var name = $".{Sanitize(playlistTitle)}";
 
         if (name.Length > MaxFileNameLength)
             name = name[..MaxFileNameLength];
