@@ -22,10 +22,6 @@ public class DownloadManager
 
     private PlaylistInfo? _playlistInfo;
     private bool _isCompleted;
-    private long _lastNotifyTicks;
-
-    public event Action? StateChanged;
-
     public IReadOnlyList<DownloadItem> AllItems => _allItems;
     public PlaylistInfo? Playlist => _playlistInfo;
     public bool IsCompleted => _isCompleted;
@@ -91,7 +87,6 @@ public class DownloadManager
             }
         }
 
-        NotifyStateChanged();
     }
 
     public async Task RunAsync(CancellationToken ct = default)
@@ -155,7 +150,6 @@ public class DownloadManager
 
         _isCompleted = true;
         _log.Log("Status", "All downloads and transcodes complete");
-        NotifyStateChanged();
     }
 
     // --- Transcoding Worker ---
@@ -246,7 +240,6 @@ public class DownloadManager
                 item.PendingTranscode = null;
             }
             _log.Log("Status", $"{item.Title} -> Completed");
-            NotifyStateChanged();
 
             await WritePlaylistAsync();
         }
@@ -287,8 +280,6 @@ public class DownloadManager
     private async Task DownloadItemAsync(DownloadItem item, CancellationToken ct)
     {
         var outputDir = Path.GetFullPath(_options.OutputDirectory);
-
-        NotifyStateChanged();
 
         try
         {
@@ -335,7 +326,6 @@ public class DownloadManager
                 item.ResetProgress();
             }
             _log.Log("Status", $"{item.Title} -> Transcoding");
-            NotifyStateChanged();
 
             await _transcodeChannel.Writer.WriteAsync(item, ct);
         }
@@ -462,7 +452,6 @@ public class DownloadManager
             item.TotalBytes = total;
             item.Progress = newProgress;
         }
-        NotifyProgressChanged();
     }
 
     private void HandleDownloadFailure(DownloadItem item, Exception ex)
@@ -484,7 +473,6 @@ public class DownloadManager
                 item.ErrorMessage = $"Retrying ({item.FailedAttempts}/{item.MaxRetries}): {ex.Message}";
             }
         }
-        NotifyStateChanged();
     }
 
     private void HandleTranscodeFailure(DownloadItem item, Exception ex)
@@ -508,7 +496,6 @@ public class DownloadManager
                 item.ErrorMessage = $"Transcode retry ({item.FailedAttempts}/{item.MaxRetries}): {ex.Message}";
             }
         }
-        NotifyStateChanged();
     }
 
     // --- Helpers ---
@@ -539,17 +526,6 @@ public class DownloadManager
         var playlistFileName = _naming.GetPlaylistFileName(_playlistInfo.Title);
         var playlistPath = Path.Combine(outputDir, playlistFileName);
         await _playlistWriter.WriteAsync(playlistPath, _allItems, _options.Type);
-    }
-
-    private void NotifyStateChanged() => StateChanged?.Invoke();
-
-    private void NotifyProgressChanged()
-    {
-        var now = Environment.TickCount64;
-        if (now - Interlocked.Read(ref _lastNotifyTicks) < 250)
-            return;
-        Interlocked.Exchange(ref _lastNotifyTicks, now);
-        StateChanged?.Invoke();
     }
 
     private static void TryDelete(string path)

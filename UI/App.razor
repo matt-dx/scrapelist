@@ -32,8 +32,23 @@
 
     protected override async Task OnInitializedAsync()
     {
-        Manager.StateChanged += OnStateChanged;
         _cts = new CancellationTokenSource();
+
+        // Periodic UI refresh (250ms) — replaces fragile event-driven rendering
+        // that would freeze when InvokeAsync threw under high concurrency
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
+            while (await timer.WaitForNextTickAsync(_cts.Token))
+            {
+                try
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (OperationCanceledException) { break; }
+                catch { /* render error — timer will retry next tick */ }
+            }
+        });
 
         try
         {
@@ -54,18 +69,6 @@
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Initialization failed: {ex.Message}");
-        }
-    }
-
-    private void OnStateChanged()
-    {
-        try
-        {
-            _ = InvokeAsync(StateHasChanged);
-        }
-        catch
-        {
-            // Swallow render errors — throttled updates may overlap
         }
     }
 
