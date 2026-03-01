@@ -69,7 +69,7 @@ public class FfmpegService
     }
 
     public async Task MuxAsync(string videoPath, string audioPath, string outputPath,
-        Models.VideoCodec codec, CancellationToken ct = default)
+        Models.VideoCodec codec, string? subtitlePath = null, CancellationToken ct = default)
     {
         if (_ffmpegPath is null)
             throw new InvalidOperationException("FFmpeg is not available. Call EnsureAvailableAsync first.");
@@ -81,14 +81,26 @@ public class FfmpegService
             _ => "libx265"
         };
 
-        var ffmpegArgs = new[]
-        {
-            "-i", videoPath, "-i", audioPath,
-            "-c:v", encoder, "-preset", "fast", "-crf", "18",
-            "-c:a", "aac", "-b:a", "256k",
-            "-movflags", "+faststart", "-tag:v", "hvc1",
-            "-y", outputPath
-        };
+        var args = new List<string> { "-i", videoPath, "-i", audioPath };
+
+        if (subtitlePath is not null)
+            args.AddRange(["-i", subtitlePath]);
+
+        args.AddRange(["-c:v", encoder, "-preset", "fast", "-crf", "18"]);
+        args.AddRange(["-c:a", "aac", "-b:a", "256k"]);
+
+        if (subtitlePath is not null)
+            args.AddRange(["-c:s", "srt"]);  // MKV supports SRT natively
+
+        var isMkv = outputPath.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase);
+        if (!isMkv)
+            args.AddRange(["-movflags", "+faststart"]);  // MP4/M4V only
+        if (codec == Models.VideoCodec.X265 && !isMkv)
+            args.AddRange(["-tag:v", "hvc1"]);           // MP4/M4V HEVC only
+
+        args.AddRange(["-y", outputPath]);
+
+        var ffmpegArgs = args.ToArray();
         _log.Log("FFmpeg", $"Mux: {string.Join(' ', ffmpegArgs)}");
 
         var result = await CliRunner.Wrap(_ffmpegPath)

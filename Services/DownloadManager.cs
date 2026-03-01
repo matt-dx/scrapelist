@@ -218,17 +218,19 @@ public class DownloadManager
                     try
                     {
                         await _ffmpeg.MuxAsync(task.VideoPartPath!, task.VideoAudioPartPath!,
-                            task.VideoMuxPath!, task.Codec, ct);
+                            task.VideoMuxPath!, task.Codec, task.SubtitlePath, ct);
                     }
                     catch
                     {
                         TryDelete(task.VideoPartPath!);
                         TryDelete(task.VideoAudioPartPath!);
                         TryDelete(task.VideoMuxPath!);
+                        if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
                         throw;
                     }
                     TryDelete(task.VideoPartPath!);
                     TryDelete(task.VideoAudioPartPath!);
+                    if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
                     File.Move(task.VideoMuxPath!, task.VideoFinalPath!, overwrite: true);
                 }
             }
@@ -316,6 +318,25 @@ public class DownloadManager
                     VideoMuxPath = videoPaths.MuxPath,
                     VideoFinalPath = videoPaths.FinalPath
                 };
+
+                // Download subtitles (non-blocking — skip if unavailable or on error)
+                try
+                {
+                    var captionTrack = await _youtube.GetBestCaptionTrackAsync(item.VideoId, ct);
+                    if (captionTrack is not null)
+                    {
+                        var subtitlePath = Path.Combine(outputDir,
+                            _naming.GetPartFileName($"{item.VideoFilePath}.srt"));
+                        await _youtube.DownloadCaptionAsync(captionTrack, subtitlePath, ct);
+                        transcodeTask = transcodeTask with { SubtitlePath = subtitlePath };
+                        _log.Log("Download", $"Subtitles downloaded ({captionTrack.Language.Name}): {item.Title}");
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    _log.Log("Download", $"Subtitle download failed (skipping): {item.Title} — {ex.Message}");
+                }
             }
 
             // Transition to Transcoding and enqueue
@@ -514,7 +535,10 @@ public class DownloadManager
             item.AudioFilePath = _naming.GetFileName(item, "m4a", _options.Indexed);
 
         if (_options.Type is DownloadType.Video or DownloadType.Both)
-            item.VideoFilePath = _naming.GetFileName(item, "m4v", _options.Indexed);
+        {
+            var videoExt = _options.Codec == VideoCodec.X265 ? "mkv" : "m4v";
+            item.VideoFilePath = _naming.GetFileName(item, videoExt, _options.Indexed);
+        }
     }
 
     private async Task WritePlaylistAsync()
