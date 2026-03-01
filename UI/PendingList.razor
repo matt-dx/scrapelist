@@ -1,0 +1,32 @@
+@using RazorConsole.Components
+@using Scrapelist.Models
+
+@if (Items.Count > 0)
+{
+    <Panel Title="@($"Pending ({Items.Count})")" BorderColor="@Color.Grey">
+        <Rows>
+            @foreach (var item in Items.Take(10))
+            {
+                <Markup Content="@GetItemText(item)" Foreground="@Color.Grey" />
+            }
+            @if (Items.Count > 10)
+            {
+                <Markup Content="@($"  ... and {Items.Count - 10} more")" Foreground="@Color.Grey" />
+            }
+        </Rows>
+    </Panel>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
+
+    private static string GetItemText(DownloadItem item)
+    {
+        var prefix = item.PlaylistIndex > 0 ? $"  {item.PlaylistIndex}. " : "  ";
+        var title = item.Title;
+        if (title.Length > 60)
+            title = title[..57] + "...";
+        var retry = item.FailedAttempts > 0 ? $" (retry {item.FailedAttempts})" : "";
+        return $"{prefix}{title}{retry}";
+    }
+}

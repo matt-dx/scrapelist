@@ -1,0 +1,83 @@
+@using Microsoft.AspNetCore.Components
+@using RazorConsole.Components
+@using Scrapelist.Models
+@using Scrapelist.Services
+@inject DownloadManager Manager
+
+<Rows>
+    <HeaderSection SourceUri="@Manager.SourceUri"
+                   DownloadType="@Manager.DownloadType"
+                   Items="@Manager.AllItems" />
+
+    <ActiveDownloads Items="@GetItemsByStatus(DownloadStatus.Downloading)" />
+
+    <TranscodingList Items="@GetItemsByStatus(DownloadStatus.Transcoding)" />
+
+    <PendingList Items="@GetItemsByStatus(DownloadStatus.Pending)" />
+
+    <CompletedList Items="@GetCompletedAndSkipped()" />
+
+    <FailedList Items="@GetItemsByStatus(DownloadStatus.Failed)" />
+
+    @if (Manager.IsCompleted)
+    {
+        <Panel Title="Status" BorderColor="@Color.Green">
+            <Markup Content="All downloads complete!" Foreground="@Color.Green" />
+        </Panel>
+    }
+</Rows>
+
+@code {
+    private CancellationTokenSource? _cts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Manager.StateChanged += OnStateChanged;
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            await Manager.InitializeAsync(_cts.Token);
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await Manager.RunAsync(_cts.Token);
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Fatal error: {ex.Message}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Initialization failed: {ex.Message}");
+        }
+    }
+
+    private void OnStateChanged()
+    {
+        try
+        {
+            _ = InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Swallow render errors — throttled updates may overlap
+        }
+    }
+
+    private IReadOnlyList<DownloadItem> GetItemsByStatus(DownloadStatus status)
+    {
+        return Manager.AllItems.Where(i => i.Status == status).ToList();
+    }
+
+    private IReadOnlyList<DownloadItem> GetCompletedAndSkipped()
+    {
+        return Manager.AllItems
+            .Where(i => i.Status is DownloadStatus.Completed or DownloadStatus.Skipped)
+            .ToList();
+    }
+}
