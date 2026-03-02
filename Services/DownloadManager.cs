@@ -22,10 +22,6 @@ public class DownloadManager
 
     private PlaylistInfo? _playlistInfo;
     private bool _isCompleted;
-    private long _lastNotifyTicks;
-
-    public event Action? StateChanged;
-
     public IReadOnlyList<DownloadItem> AllItems => _allItems;
     public PlaylistInfo? Playlist => _playlistInfo;
     public bool IsCompleted => _isCompleted;
@@ -91,7 +87,6 @@ public class DownloadManager
             }
         }
 
-        NotifyStateChanged();
     }
 
     public async Task RunAsync(CancellationToken ct = default)
@@ -155,7 +150,6 @@ public class DownloadManager
 
         _isCompleted = true;
         _log.Log("Status", "All downloads and transcodes complete");
-        NotifyStateChanged();
     }
 
     // --- Transcoding Worker ---
@@ -198,13 +192,20 @@ public class DownloadManager
 
             _log.Log("Transcode", $"Starting: {item.Title}");
 
+            item.StartedAt = DateTime.UtcNow;
+            Action<double> onProgress = progress =>
+            {
+                lock (_lock) { item.Progress = progress; }
+            };
+
             if (task.Type is TranscodeType.AudioOnly or TranscodeType.Both)
             {
                 if (!File.Exists(task.AudioFinalPath))
                 {
                     try
                     {
-                        await _ffmpeg.TranscodeAudioAsync(task.AudioPartPath!, task.AudioRawPath!, ct);
+                        await _ffmpeg.TranscodeAudioAsync(task.AudioPartPath!, task.AudioRawPath!,
+                            item.Duration, onProgress, ct);
                     }
                     catch
                     {
@@ -224,17 +225,20 @@ public class DownloadManager
                     try
                     {
                         await _ffmpeg.MuxAsync(task.VideoPartPath!, task.VideoAudioPartPath!,
-                            task.VideoMuxPath!, task.Codec, ct);
+                            task.VideoMuxPath!, task.Codec, task.SubtitlePath,
+                            item.Duration, onProgress, ct);
                     }
                     catch
                     {
                         TryDelete(task.VideoPartPath!);
                         TryDelete(task.VideoAudioPartPath!);
                         TryDelete(task.VideoMuxPath!);
+                        if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
                         throw;
                     }
                     TryDelete(task.VideoPartPath!);
                     TryDelete(task.VideoAudioPartPath!);
+                    if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
                     File.Move(task.VideoMuxPath!, task.VideoFinalPath!, overwrite: true);
                 }
             }
@@ -246,7 +250,6 @@ public class DownloadManager
                 item.PendingTranscode = null;
             }
             _log.Log("Status", $"{item.Title} -> Completed");
-            NotifyStateChanged();
 
             await WritePlaylistAsync();
         }
@@ -288,8 +291,6 @@ public class DownloadManager
     {
         var outputDir = Path.GetFullPath(_options.OutputDirectory);
 
-        NotifyStateChanged();
-
         try
         {
             var manifest = await _youtube.GetStreamManifestAsync(item.VideoId, ct);
@@ -325,6 +326,25 @@ public class DownloadManager
                     VideoMuxPath = videoPaths.MuxPath,
                     VideoFinalPath = videoPaths.FinalPath
                 };
+
+                // Download subtitles (non-blocking — skip if unavailable or on error)
+                try
+                {
+                    var captionTrack = await _youtube.GetBestCaptionTrackAsync(item.VideoId, ct);
+                    if (captionTrack is not null)
+                    {
+                        var subtitlePath = Path.Combine(outputDir,
+                            _naming.GetPartFileName($"{item.VideoFilePath}.srt"));
+                        await _youtube.DownloadCaptionAsync(captionTrack, subtitlePath, ct);
+                        transcodeTask = transcodeTask with { SubtitlePath = subtitlePath };
+                        _log.Log("Download", $"Subtitles downloaded ({captionTrack.Language.Name}): {item.Title}");
+                    }
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+                catch (Exception ex)
+                {
+                    _log.Log("Download", $"Subtitle download failed (skipping): {item.Title} — {ex.Message}");
+                }
             }
 
             // Transition to Transcoding and enqueue
@@ -335,7 +355,6 @@ public class DownloadManager
                 item.ResetProgress();
             }
             _log.Log("Status", $"{item.Title} -> Transcoding");
-            NotifyStateChanged();
 
             await _transcodeChannel.Writer.WriteAsync(item, ct);
         }
@@ -462,7 +481,6 @@ public class DownloadManager
             item.TotalBytes = total;
             item.Progress = newProgress;
         }
-        NotifyProgressChanged();
     }
 
     private void HandleDownloadFailure(DownloadItem item, Exception ex)
@@ -484,7 +502,6 @@ public class DownloadManager
                 item.ErrorMessage = $"Retrying ({item.FailedAttempts}/{item.MaxRetries}): {ex.Message}";
             }
         }
-        NotifyStateChanged();
     }
 
     private void HandleTranscodeFailure(DownloadItem item, Exception ex)
@@ -508,7 +525,6 @@ public class DownloadManager
                 item.ErrorMessage = $"Transcode retry ({item.FailedAttempts}/{item.MaxRetries}): {ex.Message}";
             }
         }
-        NotifyStateChanged();
     }
 
     // --- Helpers ---
@@ -527,7 +543,10 @@ public class DownloadManager
             item.AudioFilePath = _naming.GetFileName(item, "m4a", _options.Indexed);
 
         if (_options.Type is DownloadType.Video or DownloadType.Both)
-            item.VideoFilePath = _naming.GetFileName(item, "m4v", _options.Indexed);
+        {
+            var videoExt = _options.Codec == VideoCodec.X265 ? "mkv" : "m4v";
+            item.VideoFilePath = _naming.GetFileName(item, videoExt, _options.Indexed);
+        }
     }
 
     private async Task WritePlaylistAsync()
@@ -539,17 +558,6 @@ public class DownloadManager
         var playlistFileName = _naming.GetPlaylistFileName(_playlistInfo.Title);
         var playlistPath = Path.Combine(outputDir, playlistFileName);
         await _playlistWriter.WriteAsync(playlistPath, _allItems, _options.Type);
-    }
-
-    private void NotifyStateChanged() => StateChanged?.Invoke();
-
-    private void NotifyProgressChanged()
-    {
-        var now = Environment.TickCount64;
-        if (now - Interlocked.Read(ref _lastNotifyTicks) < 250)
-            return;
-        Interlocked.Exchange(ref _lastNotifyTicks, now);
-        StateChanged?.Invoke();
     }
 
     private static void TryDelete(string path)

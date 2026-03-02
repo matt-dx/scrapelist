@@ -16,6 +16,9 @@ public record TranscodeTask
     public string? VideoFinalPath { get; init; }
 
     public VideoCodec Codec { get; init; }
+
+    // Subtitle (SRT) file path — null if no subtitles available
+    public string? SubtitlePath { get; init; }
 }
 
 public enum TranscodeType

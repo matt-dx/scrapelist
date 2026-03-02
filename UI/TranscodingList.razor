@@ -7,7 +7,11 @@
         <Rows>
             @foreach (var item in Items)
             {
-                <Markup Content="@GetItemText(item)" Foreground="@Color.Cyan1" />
+                <Columns>
+                    <Markup Content="@GetTitle(item)" Foreground="@Color.White" />
+                    <Markup Content="@GetProgressBar(item)" Foreground="@Color.Cyan1" />
+                    <Markup Content="@GetTimingInfo(item)" Foreground="@Color.Grey" />
+                </Columns>
             }
         </Rows>
     </Panel>
@@ -16,11 +20,38 @@
 @code {
     [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
 
-    private static string GetItemText(DownloadItem item)
+    private static string GetTitle(DownloadItem item)
     {
         var title = item.Title;
-        if (title.Length > 50)
-            title = title[..47] + "...";
-        return $"  {title}  Transcoding...";
+        if (title.Length > 35)
+            title = title[..32] + "...";
+        return title.PadRight(35);
+    }
+
+    private static string GetProgressBar(DownloadItem item)
+    {
+        const int barWidth = 20;
+        var filled = (int)(item.Progress * barWidth);
+        var empty = barWidth - filled;
+
+        var pct = (int)(item.Progress * 100);
+        var bar = new string('#', filled) + new string('-', empty);
+        return $"[{bar}] {pct,3}%";
+    }
+
+    private static string GetTimingInfo(DownloadItem item)
+    {
+        var elapsed = FormatTime(item.Elapsed);
+        var remaining = item.EstimatedRemaining.HasValue
+            ? $" / ~{FormatTime(item.EstimatedRemaining.Value)}"
+            : "";
+        return $"{elapsed}{remaining}";
+    }
+
+    private static string FormatTime(TimeSpan ts)
+    {
+        return ts.Hours > 0
+            ? $"{ts.Hours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{ts.Minutes}:{ts.Seconds:D2}";
     }
 }

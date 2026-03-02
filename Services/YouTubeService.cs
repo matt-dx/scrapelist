@@ -3,6 +3,7 @@ using YoutubeExplode;
 using YoutubeExplode.Common;
 using YoutubeExplode.Playlists;
 using YoutubeExplode.Videos;
+using YoutubeExplode.Videos.ClosedCaptions;
 using YoutubeExplode.Videos.Streams;
 
 namespace Scrapelist.Services;
@@ -81,5 +82,19 @@ public class YouTubeService
     public string GetStreamContainer(IStreamInfo streamInfo)
     {
         return streamInfo.Container.Name;
+    }
+
+    public async Task<ClosedCaptionTrackInfo?> GetBestCaptionTrackAsync(string videoId, CancellationToken ct = default)
+    {
+        var manifest = await _client.Videos.ClosedCaptions.GetManifestAsync(videoId, ct);
+
+        // Prefer English, fall back to first available
+        return manifest.GetByLanguage("en")
+            ?? manifest.Tracks.FirstOrDefault();
+    }
+
+    public async Task DownloadCaptionAsync(ClosedCaptionTrackInfo track, string outputPath, CancellationToken ct = default)
+    {
+        await _client.Videos.ClosedCaptions.DownloadAsync(track, outputPath, progress: null, cancellationToken: ct);
     }
 }

@@ -2,7 +2,9 @@
 @using RazorConsole.Components
 @using Scrapelist.Models
 @using Scrapelist.Services
+@using Microsoft.Extensions.Hosting
 @inject DownloadManager Manager
+@inject IHostApplicationLifetime AppLifetime
 
 <Rows>
     <HeaderSection SourceUri="@Manager.SourceUri"
@@ -32,8 +34,23 @@
 
     protected override async Task OnInitializedAsync()
     {
-        Manager.StateChanged += OnStateChanged;
         _cts = new CancellationTokenSource();
+
+        // Periodic UI refresh (250ms) — replaces fragile event-driven rendering
+        // that would freeze when InvokeAsync threw under high concurrency
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(250));
+            while (await timer.WaitForNextTickAsync(_cts.Token))
+            {
+                try
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+                catch (OperationCanceledException) { break; }
+                catch { /* render error — timer will retry next tick */ }
+            }
+        });
 
         try
         {
@@ -49,23 +66,16 @@
                 {
                     Console.Error.WriteLine($"Fatal error: {ex.Message}");
                 }
+
+                // Allow final UI render to show completion status, then exit
+                await Task.Delay(2000);
+                _cts?.Cancel();
+                AppLifetime.StopApplication();
             });
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Initialization failed: {ex.Message}");
-        }
-    }
-
-    private void OnStateChanged()
-    {
-        try
-        {
-            _ = InvokeAsync(StateHasChanged);
-        }
-        catch
-        {
-            // Swallow render errors — throttled updates may overlap
         }
     }
 

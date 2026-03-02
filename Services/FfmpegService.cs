@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Runtime.InteropServices;
+using System.Text;
 using CliWrap;
 using CliWrap.Buffered;
 
@@ -46,30 +47,41 @@ public class FfmpegService
                 "FFmpeg download failed. Please install FFmpeg manually and ensure it's on your PATH.");
     }
 
-    public async Task TranscodeAudioAsync(string inputPath, string outputPath, CancellationToken ct = default)
+    public async Task TranscodeAudioAsync(string inputPath, string outputPath,
+        TimeSpan? duration = null, Action<double>? onProgress = null, CancellationToken ct = default)
     {
         if (_ffmpegPath is null)
             throw new InvalidOperationException("FFmpeg is not available. Call EnsureAvailableAsync first.");
 
-        var ffmpegArgs = new[] { "-i", inputPath, "-c:a", "aac", "-b:a", "256k", "-y", outputPath };
+        var args = new List<string> { "-i", inputPath, "-c:a", "aac", "-b:a", "256k" };
+        args.AddRange(["-progress", "pipe:1", "-y", outputPath]);
+
+        var ffmpegArgs = args.ToArray();
         _log.Log("FFmpeg", $"Transcode audio: {string.Join(' ', ffmpegArgs)}");
+
+        var totalUs = duration?.TotalMicroseconds ?? 0;
+        var stderr = new StringBuilder();
 
         var result = await CliRunner.Wrap(_ffmpegPath)
             .WithArguments(ffmpegArgs)
             .WithValidation(CommandResultValidation.None)
-            .ExecuteBufferedAsync(ct);
+            .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
+                ParseFfmpegProgress(line, totalUs, onProgress)))
+            .WithStandardErrorPipe(PipeTarget.ToStringBuilder(stderr))
+            .ExecuteAsync(ct);
 
         if (result.ExitCode != 0)
         {
-            _log.Log("FFmpeg", $"Audio transcode failed (exit {result.ExitCode}): {result.StandardError}");
+            _log.Log("FFmpeg", $"Audio transcode failed (exit {result.ExitCode}): {stderr}");
             throw new InvalidOperationException(
-                $"FFmpeg audio transcode failed (exit code {result.ExitCode}): {result.StandardError}");
+                $"FFmpeg audio transcode failed (exit code {result.ExitCode}): {stderr}");
         }
         _log.Log("FFmpeg", $"Audio transcode complete: {outputPath}");
     }
 
     public async Task MuxAsync(string videoPath, string audioPath, string outputPath,
-        Models.VideoCodec codec, CancellationToken ct = default)
+        Models.VideoCodec codec, string? subtitlePath = null,
+        TimeSpan? duration = null, Action<double>? onProgress = null, CancellationToken ct = default)
     {
         if (_ffmpegPath is null)
             throw new InvalidOperationException("FFmpeg is not available. Call EnsureAvailableAsync first.");
@@ -81,28 +93,60 @@ public class FfmpegService
             _ => "libx265"
         };
 
-        var ffmpegArgs = new[]
-        {
-            "-i", videoPath, "-i", audioPath,
-            "-c:v", encoder, "-preset", "fast", "-crf", "18",
-            "-c:a", "aac", "-b:a", "256k",
-            "-movflags", "+faststart", "-tag:v", "hvc1",
-            "-y", outputPath
-        };
+        var args = new List<string> { "-i", videoPath, "-i", audioPath };
+
+        if (subtitlePath is not null)
+            args.AddRange(["-i", subtitlePath]);
+
+        args.AddRange(["-c:v", encoder, "-preset", "fast", "-crf", "18"]);
+        args.AddRange(["-c:a", "aac", "-b:a", "256k"]);
+
+        if (subtitlePath is not null)
+            args.AddRange(["-c:s", "srt"]);  // MKV supports SRT natively
+
+        var isMkv = outputPath.EndsWith(".mkv", StringComparison.OrdinalIgnoreCase);
+        if (!isMkv)
+            args.AddRange(["-movflags", "+faststart"]);  // MP4/M4V only
+        if (codec == Models.VideoCodec.X265 && !isMkv)
+            args.AddRange(["-tag:v", "hvc1"]);           // MP4/M4V HEVC only
+
+        args.AddRange(["-progress", "pipe:1", "-y", outputPath]);
+
+        var ffmpegArgs = args.ToArray();
         _log.Log("FFmpeg", $"Mux: {string.Join(' ', ffmpegArgs)}");
+
+        var totalUs = duration?.TotalMicroseconds ?? 0;
+        var stderr = new StringBuilder();
 
         var result = await CliRunner.Wrap(_ffmpegPath)
             .WithArguments(ffmpegArgs)
             .WithValidation(CommandResultValidation.None)
-            .ExecuteBufferedAsync(ct);
+            .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
+                ParseFfmpegProgress(line, totalUs, onProgress)))
+            .WithStandardErrorPipe(PipeTarget.ToStringBuilder(stderr))
+            .ExecuteAsync(ct);
 
         if (result.ExitCode != 0)
         {
-            _log.Log("FFmpeg", $"Mux failed (exit {result.ExitCode}): {result.StandardError}");
+            _log.Log("FFmpeg", $"Mux failed (exit {result.ExitCode}): {stderr}");
             throw new InvalidOperationException(
-                $"FFmpeg muxing failed (exit code {result.ExitCode}): {result.StandardError}");
+                $"FFmpeg muxing failed (exit code {result.ExitCode}): {stderr}");
         }
         _log.Log("FFmpeg", $"Mux complete: {outputPath}");
+    }
+
+    private static void ParseFfmpegProgress(string line, double totalUs, Action<double>? onProgress)
+    {
+        if (onProgress is null || totalUs <= 0)
+            return;
+
+        // FFmpeg -progress pipe:1 outputs key=value pairs; out_time_us gives microseconds processed
+        if (line.StartsWith("out_time_us=", StringComparison.Ordinal)
+            && long.TryParse(line.AsSpan(12), out var us) && us >= 0)
+        {
+            var progress = Math.Clamp(us / totalUs, 0, 1);
+            onProgress(progress);
+        }
     }
 
     private static async Task<string?> TryFindOnPathAsync()
@@ -180,7 +224,7 @@ public class FfmpegService
             Console.WriteLine("done.");
 
             Console.Write("  Extracting... ");
-            ExtractFfmpeg(tempFile, toolsDir, archiveEntryName);
+            await ExtractFfmpegAsync(tempFile, toolsDir, archiveEntryName);
             Console.WriteLine("done.");
         }
         finally
@@ -190,8 +234,28 @@ public class FfmpegService
         }
     }
 
-    private static void ExtractFfmpeg(string archivePath, string toolsDir, string targetName)
+    private static async Task ExtractFfmpegAsync(string archivePath, string toolsDir, string targetName)
     {
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            // Linux builds are .tar.xz — use system tar to extract
+            var result = await CliRunner.Wrap("tar")
+                .WithArguments(["xf", archivePath, "--wildcards", $"*/bin/{targetName}",
+                    "--strip-components=2", "-C", toolsDir])
+                .WithValidation(CommandResultValidation.None)
+                .ExecuteBufferedAsync();
+
+            if (result.ExitCode != 0)
+                throw new InvalidOperationException(
+                    $"Failed to extract FFmpeg from tar.xz: {result.StandardError}");
+
+            var outputPath = Path.Combine(toolsDir, targetName);
+            File.SetUnixFileMode(outputPath,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            return;
+        }
+
+        // ZIP extraction (Windows, macOS)
         using var archive = ZipFile.OpenRead(archivePath);
 
         var entry = archive.Entries.FirstOrDefault(e =>
@@ -204,12 +268,12 @@ public class FfmpegService
         if (entry is null)
             throw new InvalidOperationException($"Could not find '{targetName}' in the downloaded archive.");
 
-        var outputPath = Path.Combine(toolsDir, targetName);
-        entry.ExtractToFile(outputPath, overwrite: true);
+        var zipOutputPath = Path.Combine(toolsDir, targetName);
+        entry.ExtractToFile(zipOutputPath, overwrite: true);
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            File.SetUnixFileMode(outputPath,
+            File.SetUnixFileMode(zipOutputPath,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
         }
     }
