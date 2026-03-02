@@ -192,13 +192,20 @@ public class DownloadManager
 
             _log.Log("Transcode", $"Starting: {item.Title}");
 
+            item.StartedAt = DateTime.UtcNow;
+            Action<double> onProgress = progress =>
+            {
+                lock (_lock) { item.Progress = progress; }
+            };
+
             if (task.Type is TranscodeType.AudioOnly or TranscodeType.Both)
             {
                 if (!File.Exists(task.AudioFinalPath))
                 {
                     try
                     {
-                        await _ffmpeg.TranscodeAudioAsync(task.AudioPartPath!, task.AudioRawPath!, ct);
+                        await _ffmpeg.TranscodeAudioAsync(task.AudioPartPath!, task.AudioRawPath!,
+                            item.Duration, onProgress, ct);
                     }
                     catch
                     {
@@ -218,7 +225,8 @@ public class DownloadManager
                     try
                     {
                         await _ffmpeg.MuxAsync(task.VideoPartPath!, task.VideoAudioPartPath!,
-                            task.VideoMuxPath!, task.Codec, task.SubtitlePath, ct);
+                            task.VideoMuxPath!, task.Codec, task.SubtitlePath,
+                            item.Duration, onProgress, ct);
                     }
                     catch
                     {
