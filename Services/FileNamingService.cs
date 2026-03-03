@@ -23,12 +23,12 @@ public class FileNamingService
 
     public string GetPlaylistFileName(string playlistTitle)
     {
-        var name = $".{Sanitize(playlistTitle)}";
+        var name = $"{Sanitize(playlistTitle)}";
 
         if (name.Length > MaxFileNameLength)
             name = name[..MaxFileNameLength];
 
-        return $"{name}.m3u";
+        return $"# {name}.m3u";
     }
 
     public string GetPartFileName(string fileName)

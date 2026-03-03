@@ -13,7 +13,7 @@ public class DebugLogger : IDisposable
 
         var dir = Path.GetFullPath(outputDirectory);
         Directory.CreateDirectory(dir);
-        var fileName = $".debug-{DateTime.Now:yyyyMMdd-HHmmss}.log";
+        var fileName = $"!debug-{DateTime.Now:yyyyMMdd-HHmmss}.log";
         var path = Path.Combine(dir, fileName);
         _writer = new StreamWriter(path, append: false) { AutoFlush = true };
         Log($"Debug logging started — output: {dir}");
