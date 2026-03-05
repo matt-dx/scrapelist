@@ -1,14 +1,18 @@
 # scrapelist
 
-`scrapelist` is a terminal UI app that downloads a YouTube video or playlist, transcodes the result with FFmpeg, and writes a ready-to-play `.m3u` playlist.
+`scrapelist` downloads YouTube videos or playlists, transcodes them with FFmpeg, and writes ready-to-play `.m3u` playlists.
 
-It supports:
+Two interfaces are available:
+
+- **CLI**: Terminal UI with live status panels (recommended for automation and servers)
+- **Desktop**: MAUI-based graphical application for Windows/Android
+
+Both share the same core download and transcoding engine. Features include:
 
 - audio-only downloads (`.m4a`)
 - video-only downloads (`.m4v`)
 - both audio and video in one run
-
-The app shows live status panels for pending, downloading, transcoding, completed/skipped, and failed items.
+- live status panels for pending, downloading, transcoding, completed/skipped, and failed items
 
 ## Requirements
 
@@ -22,25 +26,37 @@ No manual FFmpeg install is required in most cases:
 
 ## Quick start
 
+### CLI (Terminal)
+
 From the project root:
 
 ```bash
-dotnet run -- "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
+dotnet run --project src/scrapelist.cli -- "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID"
 ```
 
 Single video:
 
 ```bash
-dotnet run -- "https://www.youtube.com/watch?v=VIDEO_ID"
+dotnet run --project src/scrapelist.cli -- "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 Audio-only to a specific folder:
 
 ```bash
-dotnet run -- "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" --type audio --output "D:\Music"
+dotnet run --project src/scrapelist.cli -- "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" --type audio --output "D:\Music"
 ```
 
+### Desktop (MAUI)
+
+```bash
+dotnet run --project src/scrapelist
+```
+
+The desktop app provides a graphical interface for URL input and progress monitoring.
+
 ## CLI usage
+
+(CLI version only)
 
 ```text
 scrapelist <uri> [options]
@@ -82,14 +98,14 @@ scrapelist <uri> [options]
   - Output directory
   - Default: `.`
 
-- `--codec <x264|x265>`
+- `--codec <none|x264|x265>`
 
   - Video encoder used during mux/transcode
   - Default: `x265`
 
 - `--debug`
 
-  - Write a debug log file in the output folder (`.debug-YYYYMMDD-HHMMSS.log`)
+  - Write a debug log file in the output folder (`!debug-YYYYMMDD-HHMMSS.log`)
   - Default: `false`
 
 ## What gets created
@@ -102,7 +118,7 @@ Depending on `--type`, each item outputs:
 
 If the input is a playlist, the app also creates:
 
-- `~Playlist Title.m3u`
+- `# Playlist Title.m3u`
 
 The `.m3u` contains `#EXTINF` metadata and references completed/skipped files in playlist order.
 
@@ -123,23 +139,33 @@ The `.m3u` contains `#EXTINF` metadata and references completed/skipped files in
 
 ## Examples
 
-Video only with H.264:
+Video with H.264:
 
 ```bash
-dotnet run -- "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" --type video --codec x264
+dotnet run --project src/scrapelist.cli -- "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" --type video --codec x264
 ```
 
 Higher download parallelism and indexed filenames:
 
 ```bash
-dotnet run -- "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" --parallel 5 --indexed
+dotnet run --project src/scrapelist.cli -- "https://www.youtube.com/playlist?list=YOUR_PLAYLIST_ID" --parallel 5 --indexed
 ```
 
 Debug run:
 
 ```bash
-dotnet run -- "https://www.youtube.com/watch?v=VIDEO_ID" --debug --output "D:\Downloads\scrapelist"
+dotnet run --project src/scrapelist.cli -- "https://www.youtube.com/watch?v=VIDEO_ID" --debug --output "D:\Downloads\scrapelist"
 ```
+
+## Project structure
+
+The solution contains three projects:
+
+- **`scrapelist.common`** – Shared models, services, and logic (downloads, transcoding, playlist generation)
+- **`scrapelist.cli`** – Command-line console UI using RazorConsole, supports all CLI options
+- **`scrapelist`** – MAUI desktop application (Windows/Android) with graphical interface
+
+Both CLI and Desktop versions use the same shared engine, so features and behavior are consistent across platforms.
 
 ## Troubleshooting
 
@@ -162,14 +188,28 @@ dotnet run -- "https://www.youtube.com/watch?v=VIDEO_ID" --debug --output "D:\Do
 
 ## Development
 
-Build:
+Build all projects:
 
 ```bash
 dotnet build
 ```
 
-Run:
+Run CLI version:
 
 ```bash
-dotnet run -- "https://www.youtube.com/watch?v=VIDEO_ID"
+dotnet run --project src/scrapelist.cli -- "https://www.youtube.com/watch?v=VIDEO_ID"
+```
+
+Run desktop version:
+
+```bash
+dotnet run --project src/scrapelist
+```
+
+Test projects build correctly:
+
+```bash
+dotnet build src/scrapelist.common
+dotnet build src/scrapelist.cli
+dotnet build src/scrapelist
 ```
