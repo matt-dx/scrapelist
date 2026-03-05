@@ -1,0 +1,38 @@
+@using Scrapelist.Models
+
+<MudGrid Class="align-center my-1">
+    <MudItem xs="4">
+        <MudText Typo="Typo.body2" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+            @Item.Title
+        </MudText>
+    </MudItem>
+    <MudItem xs="4">
+        <MudProgressLinear Value="@(Item.Progress * 100)" Color="@ProgressColor"
+                           Rounded="true" Size="Size.Medium" />
+        <MudText Typo="Typo.caption" Align="Align.Center">@($"{Item.Progress:P0}")</MudText>
+    </MudItem>
+    <MudItem xs="4">
+        <MudText Typo="Typo.caption" Style="opacity: 0.7;">
+            @GetTimingInfo()
+        </MudText>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter] public required DownloadItem Item { get; set; }
+    [Parameter] public Color ProgressColor { get; set; } = Color.Warning;
+
+    private string GetTimingInfo()
+    {
+        var elapsed = Formatting.FormatTime(Item.Elapsed);
+        var remaining = Item.EstimatedRemaining.HasValue
+            ? $" / ~{Formatting.FormatTime(Item.EstimatedRemaining.Value)}"
+            : "";
+
+        var size = Item.TotalBytes > 0
+            ? $" | {Formatting.FormatBytes(Item.DownloadedBytes)}/{Formatting.FormatBytes(Item.TotalBytes)}"
+            : "";
+
+        return $"{elapsed}{remaining}{size}";
+    }
+}

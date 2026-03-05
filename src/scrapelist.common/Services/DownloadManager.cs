@@ -1,12 +1,11 @@
 using System.Threading.Channels;
-using Scrapelist.Cli;
 using Scrapelist.Models;
 
 namespace Scrapelist.Services;
 
 public class DownloadManager
 {
-    private readonly CliOptions _options;
+    private readonly DownloadOptions _options;
     private readonly YouTubeService _youtube;
     private readonly StreamDownloader _downloader;
     private readonly FfmpegService _ffmpeg;
@@ -30,7 +29,7 @@ public class DownloadManager
     public DownloadType DownloadType => _options.Type;
 
     public DownloadManager(
-        CliOptions options,
+        DownloadOptions options,
         YouTubeService youtube,
         StreamDownloader downloader,
         FfmpegService ffmpeg,
@@ -49,6 +48,12 @@ public class DownloadManager
 
     public async Task InitializeAsync(CancellationToken ct = default)
     {
+        var needsFfmpeg = _options.Codec != VideoCodec.None
+            || _options.Type is DownloadType.Video or DownloadType.Both;
+
+        if (needsFfmpeg)
+            await _ffmpeg.TryEnsureAvailableAsync();
+
         _playlistInfo = await _youtube.TryResolvePlaylistAsync(_options.Uri, _options.Retries, ct);
 
         if (_playlistInfo is not null)
@@ -202,19 +207,27 @@ public class DownloadManager
             {
                 if (!File.Exists(task.AudioFinalPath))
                 {
-                    try
+                    if (task.Codec == VideoCodec.None)
                     {
-                        await _ffmpeg.TranscodeAudioAsync(task.AudioPartPath!, task.AudioRawPath!,
-                            item.Duration, onProgress, ct);
+                        // Skip transcoding — move downloaded file directly to final path
+                        File.Move(task.AudioPartPath!, task.AudioFinalPath!, overwrite: true);
                     }
-                    catch
+                    else
                     {
+                        try
+                        {
+                            await _ffmpeg.TranscodeAudioAsync(task.AudioPartPath!, task.AudioRawPath!,
+                                item.Duration, onProgress, ct);
+                        }
+                        catch
+                        {
+                            TryDelete(task.AudioPartPath!);
+                            TryDelete(task.AudioRawPath!);
+                            throw;
+                        }
                         TryDelete(task.AudioPartPath!);
-                        TryDelete(task.AudioRawPath!);
-                        throw;
+                        File.Move(task.AudioRawPath!, task.AudioFinalPath!, overwrite: true);
                     }
-                    TryDelete(task.AudioPartPath!);
-                    File.Move(task.AudioRawPath!, task.AudioFinalPath!, overwrite: true);
                 }
             }
 
@@ -222,24 +235,57 @@ public class DownloadManager
             {
                 if (!File.Exists(task.VideoFinalPath))
                 {
-                    try
+                    if (task.Codec == VideoCodec.None && _ffmpeg.IsAvailable)
                     {
-                        await _ffmpeg.MuxAsync(task.VideoPartPath!, task.VideoAudioPartPath!,
-                            task.VideoMuxPath!, task.Codec, task.SubtitlePath,
-                            item.Duration, onProgress, ct);
-                    }
-                    catch
-                    {
+                        // Fast remux — copy streams without re-encoding
+                        try
+                        {
+                            await _ffmpeg.RemuxAsync(task.VideoPartPath!, task.VideoAudioPartPath!,
+                                task.VideoMuxPath!, task.SubtitlePath,
+                                item.Duration, onProgress, ct);
+                        }
+                        catch
+                        {
+                            TryDelete(task.VideoPartPath!);
+                            TryDelete(task.VideoAudioPartPath!);
+                            TryDelete(task.VideoMuxPath!);
+                            if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
+                            throw;
+                        }
                         TryDelete(task.VideoPartPath!);
                         TryDelete(task.VideoAudioPartPath!);
-                        TryDelete(task.VideoMuxPath!);
                         if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
-                        throw;
+                        File.Move(task.VideoMuxPath!, task.VideoFinalPath!, overwrite: true);
                     }
-                    TryDelete(task.VideoPartPath!);
-                    TryDelete(task.VideoAudioPartPath!);
-                    if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
-                    File.Move(task.VideoMuxPath!, task.VideoFinalPath!, overwrite: true);
+                    else if (task.Codec == VideoCodec.None)
+                    {
+                        // No ffmpeg available (Android) — save video stream as-is
+                        _log.Log("Transcode", $"FFmpeg not available, saving raw video: {item.Title}");
+                        File.Move(task.VideoPartPath!, task.VideoFinalPath!, overwrite: true);
+                        TryDelete(task.VideoAudioPartPath!);
+                        if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            await _ffmpeg.MuxAsync(task.VideoPartPath!, task.VideoAudioPartPath!,
+                                task.VideoMuxPath!, task.Codec, task.SubtitlePath,
+                                item.Duration, onProgress, ct);
+                        }
+                        catch
+                        {
+                            TryDelete(task.VideoPartPath!);
+                            TryDelete(task.VideoAudioPartPath!);
+                            TryDelete(task.VideoMuxPath!);
+                            if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
+                            throw;
+                        }
+                        TryDelete(task.VideoPartPath!);
+                        TryDelete(task.VideoAudioPartPath!);
+                        if (task.SubtitlePath is not null) TryDelete(task.SubtitlePath);
+                        File.Move(task.VideoMuxPath!, task.VideoFinalPath!, overwrite: true);
+                    }
                 }
             }
 
@@ -540,11 +586,19 @@ public class DownloadManager
     private void AssignFilePaths(DownloadItem item)
     {
         if (_options.Type is DownloadType.Audio or DownloadType.Both)
-            item.AudioFilePath = _naming.GetFileName(item, "m4a", _options.Indexed);
+        {
+            var audioExt = _options.Codec == VideoCodec.None ? "webm" : "m4a";
+            item.AudioFilePath = _naming.GetFileName(item, audioExt, _options.Indexed);
+        }
 
         if (_options.Type is DownloadType.Video or DownloadType.Both)
         {
-            var videoExt = _options.Codec == VideoCodec.X265 ? "mkv" : "m4v";
+            var videoExt = _options.Codec switch
+            {
+                VideoCodec.None => "mkv",
+                VideoCodec.X265 => "mkv",
+                _ => "m4v"
+            };
             item.VideoFilePath = _naming.GetFileName(item, videoExt, _options.Indexed);
         }
     }

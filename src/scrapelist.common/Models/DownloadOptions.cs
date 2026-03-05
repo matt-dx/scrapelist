@@ -1,8 +1,6 @@
-using Scrapelist.Models;
+namespace Scrapelist.Models;
 
-namespace Scrapelist.Cli;
-
-public record CliOptions(
+public record DownloadOptions(
     Uri Uri,
     DownloadType Type,
     int Retries,
@@ -12,6 +10,4 @@ public record CliOptions(
     string OutputDirectory,
     VideoCodec Codec,
     bool Debug
-)
-{
-}
+);

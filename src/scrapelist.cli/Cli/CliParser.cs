@@ -6,9 +6,9 @@ namespace Scrapelist.Cli;
 
 public static class CliParser
 {
-    public static CliOptions? Parse(string[] args)
+    public static DownloadOptions? Parse(string[] args)
     {
-        CliOptions? result = null;
+        DownloadOptions? result = null;
 
         var uriArgument = new Argument<string>("uri")
         {
@@ -53,7 +53,7 @@ public static class CliParser
 
         var codecOption = new Option<string>("--codec")
         {
-            Description = "Video codec: x264 or x265",
+            Description = "Video codec: x264, x265, or none (skip transcoding)",
             DefaultValueFactory = _ => "x265"
         };
 
@@ -101,13 +101,13 @@ public static class CliParser
             var codecStr = parseResult.GetValue(codecOption) ?? "x265";
             if (!Enum.TryParse<VideoCodec>(codecStr, ignoreCase: true, out var codec))
             {
-                Console.Error.WriteLine($"Invalid codec: '{codecStr}'. Must be x264 or x265.");
+                Console.Error.WriteLine($"Invalid codec: '{codecStr}'. Must be x264, x265, or none.");
                 return;
             }
 
             var debug = parseResult.GetValue(debugOption);
 
-            result = new CliOptions(uri, downloadType, retries, parallel, indexed, timeout, output, codec, debug);
+            result = new DownloadOptions(uri, downloadType, retries, parallel, indexed, timeout, output, codec, debug);
         });
 
         var config = new CommandLineConfiguration(rootCommand);

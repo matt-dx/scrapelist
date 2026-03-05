@@ -1,0 +1,125 @@
+@page "/"
+@inject NavigationManager Nav
+@inject DownloadSession Session
+@inject YouTubeService YouTube
+@inject StreamDownloader Downloader
+@inject FfmpegService Ffmpeg
+@inject FileNamingService Naming
+@inject PlaylistWriter PlaylistWriter
+
+<MudText Typo="Typo.h4" Class="mb-4">Download Options</MudText>
+
+<MudCard>
+    <MudCardContent>
+        <MudTextField @bind-Value="_uri" Label="YouTube URL" Required="true"
+                      Placeholder="https://youtube.com/watch?v=... or playlist URL"
+                      Variant="Variant.Outlined" Class="mb-3"
+                      Immediate="true" />
+
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudSelect @bind-Value="_type" Label="Download Type" Variant="Variant.Outlined">
+                    @foreach (var t in Enum.GetValues<DownloadType>())
+                    {
+                        <MudSelectItem Value="t">@t</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            @if (_type != DownloadType.Audio)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_codec" Label="Video Codec" Variant="Variant.Outlined"
+                               Disabled="@_isAndroid">
+                        @foreach (var c in Enum.GetValues<VideoCodec>())
+                        {
+                            <MudSelectItem Value="c">@c</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+            }
+            <MudItem xs="12" sm="4">
+                <MudNumericField @bind-Value="_retries" Label="Retries" Min="1" Max="10"
+                                 Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField @bind-Value="_maxParallel" Label="Parallel Downloads" Min="1" Max="10"
+                                 Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="4">
+                <MudNumericField @bind-Value="_timeout" Label="Timeout (seconds)" Min="10"
+                                 Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudTextField @bind-Value="_outputDir" Label="Output Directory"
+                                  Variant="Variant.Outlined" Style="flex: 1;" />
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.FolderOpen"
+                               OnClick="BrowseFolder" Class="mt-2" Style="height: 56px;">
+                        Browse
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSwitch @bind-Value="_indexed" Label="Include index in filenames" Color="Color.Primary" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSwitch @bind-Value="_debug" Label="Enable debug logging" Color="Color.Primary" />
+            </MudItem>
+        </MudGrid>
+    </MudCardContent>
+    <MudCardActions Class="pa-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                   OnClick="StartDownload" Disabled="@(!IsValid())">
+            Start Download
+        </MudButton>
+    </MudCardActions>
+</MudCard>
+
+@code {
+    private string _uri = "";
+    private DownloadType _type = DownloadType.Both;
+    private VideoCodec _codec = VideoCodec.X265;
+    private int _retries = 3;
+    private int _maxParallel = 3;
+    private int _timeout = 60;
+    private bool _indexed;
+    private bool _debug;
+    private string _outputDir = ".";
+    private bool _isAndroid;
+
+    protected override void OnInitialized()
+    {
+        _isAndroid = OperatingSystem.IsAndroid();
+        if (_isAndroid)
+            _codec = VideoCodec.None;
+    }
+
+    private bool IsValid() => Uri.TryCreate(_uri, UriKind.Absolute, out _);
+
+    private async Task BrowseFolder()
+    {
+        try
+        {
+            var path = await Scrapelist.Maui.Services.FolderPickerService.PickFolderAsync();
+            if (!string.IsNullOrEmpty(path))
+            {
+                _outputDir = path;
+            }
+        }
+        catch
+        {
+            // User cancelled or platform doesn't support folder picker
+        }
+    }
+
+    private void StartDownload()
+    {
+        var options = new DownloadOptions(
+            new Uri(_uri), _type, _retries, _maxParallel,
+            _indexed, _timeout, _outputDir, _codec, _debug);
+
+        Session.Start(options, YouTube, Downloader, Ffmpeg, Naming, PlaylistWriter);
+        Nav.NavigateTo("/download");
+    }
+}

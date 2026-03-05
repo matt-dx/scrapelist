@@ -1,0 +1,40 @@
+@using Scrapelist.Models
+
+@if (Items.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-3" Elevation="1" Style="border-left: 4px solid var(--mud-palette-text-secondary); opacity: 0.8;">
+        <MudText Typo="Typo.subtitle1" Style="opacity: 0.7;" Class="mb-2">
+            Pending (@Items.Count)
+        </MudText>
+        <MudList T="string" Dense="true">
+            @foreach (var item in Items.Take(10))
+            {
+                <MudListItem T="string">
+                    <MudText Typo="Typo.body2" Style="opacity: 0.7;">
+                        @GetItemText(item)
+                    </MudText>
+                </MudListItem>
+            }
+            @if (Items.Count > 10)
+            {
+                <MudListItem T="string">
+                    <MudText Typo="Typo.caption" Style="opacity: 0.5;">
+                        ... and @(Items.Count - 10) more
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
+
+    private static string GetItemText(DownloadItem item)
+    {
+        var prefix = item.PlaylistIndex > 0 ? $"{item.PlaylistIndex}. " : "";
+        var title = item.Title.Length > 60 ? item.Title[..57] + "..." : item.Title;
+        var retry = item.FailedAttempts > 0 ? $" (retry {item.FailedAttempts})" : "";
+        return $"{prefix}{title}{retry}";
+    }
+}

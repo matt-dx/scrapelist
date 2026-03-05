@@ -1,0 +1,83 @@
+@page "/download"
+@inject DownloadSession Session
+@inject NavigationManager Nav
+@implements IDisposable
+
+@if (Session.Manager is null)
+{
+    <MudAlert Severity="Severity.Warning" Class="mt-4">No download configured.</MudAlert>
+    <MudButton Color="Color.Primary" Variant="Variant.Filled" Class="mt-2"
+               OnClick='() => Nav.NavigateTo("/")'>Back to Options</MudButton>
+}
+else
+{
+    <HeaderSection SourceUri="@Session.Manager.SourceUri"
+                   DownloadType="@Session.Manager.DownloadType"
+                   Items="@Session.Manager.AllItems" />
+
+    <ActiveDownloads Items="@GetItemsByStatus(DownloadStatus.Downloading)" />
+    <TranscodingList Items="@GetItemsByStatus(DownloadStatus.Transcoding)" />
+    <PendingList Items="@GetItemsByStatus(DownloadStatus.Pending)" />
+    <CompletedList Items="@GetCompletedAndSkipped()" />
+    <FailedList Items="@GetItemsByStatus(DownloadStatus.Failed)" />
+
+    @if (Session.Manager.IsCompleted)
+    {
+        <MudAlert Severity="Severity.Success" Class="mt-4">All downloads complete!</MudAlert>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Class="mt-2"
+                   OnClick="StartNew">New Download</MudButton>
+    }
+}
+
+@code {
+    private CancellationTokenSource? _cts;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Manager is null) return;
+
+        _cts = new CancellationTokenSource();
+
+        // 250ms UI refresh timer (same pattern as CLI App.razor)
+        _timer = new Timer(async _ =>
+        {
+            try { await InvokeAsync(StateHasChanged); } catch { }
+        }, null, 0, 250);
+
+        try
+        {
+            await Session.Manager.InitializeAsync(_cts.Token);
+            _ = Task.Run(async () =>
+            {
+                try { await Session.Manager.RunAsync(_cts.Token); }
+                catch (OperationCanceledException) { }
+            });
+        }
+        catch (Exception)
+        {
+            // Initialization error will be visible via Manager state
+        }
+    }
+
+    private void StartNew()
+    {
+        _cts?.Cancel();
+        _timer?.Dispose();
+        Session.Reset();
+        Nav.NavigateTo("/");
+    }
+
+    private IReadOnlyList<DownloadItem> GetItemsByStatus(DownloadStatus status)
+        => Session.Manager!.AllItems.Where(i => i.Status == status).ToList();
+
+    private IReadOnlyList<DownloadItem> GetCompletedAndSkipped()
+        => Session.Manager!.AllItems
+            .Where(i => i.Status is DownloadStatus.Completed or DownloadStatus.Skipped).ToList();
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _timer?.Dispose();
+    }
+}

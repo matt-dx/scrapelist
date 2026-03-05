@@ -1,0 +1,32 @@
+@using Scrapelist.Models
+
+@if (Items.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-3" Elevation="1" Style="border-left: 4px solid var(--mud-palette-error);">
+        <MudText Typo="Typo.subtitle1" Color="Color.Error" Class="mb-2">
+            Failed (@Items.Count)
+        </MudText>
+        <MudList T="string" Dense="true">
+            @foreach (var item in Items)
+            {
+                <MudListItem T="string" Icon="@Icons.Material.Filled.Error" IconColor="Color.Error">
+                    <MudText Typo="Typo.body2" Color="Color.Error">
+                        @GetItemText(item)
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
+
+    private static string GetItemText(DownloadItem item)
+    {
+        var title = item.Title.Length > 50 ? item.Title[..47] + "..." : item.Title;
+        var retries = $"({item.FailedAttempts}/{item.MaxRetries} attempts)";
+        var error = !string.IsNullOrEmpty(item.ErrorMessage) ? $" - {item.ErrorMessage}" : "";
+        return $"{title} {retries}{error}";
+    }
+}

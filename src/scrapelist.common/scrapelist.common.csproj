@@ -1,7 +1,6 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -10,9 +9,8 @@
 
   <ItemGroup>
     <PackageReference Include="YoutubeExplode" Version="6.5.7" />
-    <PackageReference Include="RazorConsole.Core" Version="0.3.0-alpha.20251207-3e3336f" />
-    <PackageReference Include="System.CommandLine" Version="2.0.0-beta5.25306.1" />
     <PackageReference Include="CliWrap" Version="3.8.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
 
 </Project>
