@@ -1,20 +1,17 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using RazorConsole.Core;
 using Scrapelist.Cli;
+using Scrapelist.Cli.UI;
 using Scrapelist.Models;
 using Scrapelist.Services;
-using Scrapelist.UI;
 
 var options = CliParser.Parse(args);
 if (options is null)
     return 1;
 
 using var debugLogger = new DebugLogger(options.OutputDirectory, options.Debug);
-
-// FFmpeg is needed for all modes (audio transcode + video mux)
-var ffmpeg = new FfmpegService(debugLogger);
-await ffmpeg.EnsureAvailableAsync();
 
 var host = Host.CreateDefaultBuilder(args)
     .UseRazorConsole<App>(configure: config =>
@@ -26,9 +23,10 @@ var host = Host.CreateDefaultBuilder(args)
             services.AddSingleton<YouTubeService>();
             services.AddSingleton<DownloadManager>();
             services.AddSingleton<StreamDownloader>();
-            services.AddSingleton(ffmpeg);
+            services.AddSingleton<FfmpegService>();
             services.AddSingleton<FileNamingService>();
             services.AddSingleton<PlaylistWriter>();
+            services.AddLogging(builder => builder.AddConsole());
         });
     })
     .Build();

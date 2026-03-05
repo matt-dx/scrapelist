@@ -1,0 +1,18 @@
+@using Scrapelist.Models
+
+@if (Items.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-3" Elevation="1" Style="border-left: 4px solid var(--mud-palette-secondary);">
+        <MudText Typo="Typo.subtitle1" Color="Color.Secondary" Class="mb-2">
+            Transcoding (@Items.Count)
+        </MudText>
+        @foreach (var item in Items)
+        {
+            <DownloadRow Item="@item" ProgressColor="Color.Secondary" />
+        }
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
+}

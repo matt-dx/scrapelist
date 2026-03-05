@@ -1,0 +1,20 @@
+@using Scrapelist.Models
+
+<MudPaper Class="pa-4 mb-3" Elevation="1">
+    <MudText Typo="Typo.subtitle2" Color="Color.Default" Style="opacity: 0.7;">@SourceUri</MudText>
+    <MudStack Row="true" Spacing="2" Class="mt-2" Wrap="Wrap.Wrap">
+        <MudChip T="string" Color="Color.Default" Size="Size.Small">Type: @DownloadType</MudChip>
+        <MudChip T="string" Color="Color.Info" Size="Size.Small">Total: @Items.Count</MudChip>
+        <MudChip T="string" Color="Color.Success" Size="Size.Small">Done: @Items.Count(i => i.Status is DownloadStatus.Completed or DownloadStatus.Skipped)</MudChip>
+        <MudChip T="string" Color="Color.Warning" Size="Size.Small">Active: @Items.Count(i => i.Status == DownloadStatus.Downloading)</MudChip>
+        <MudChip T="string" Color="Color.Secondary" Size="Size.Small">Transcoding: @Items.Count(i => i.Status == DownloadStatus.Transcoding)</MudChip>
+        <MudChip T="string" Color="Color.Default" Size="Size.Small">Pending: @Items.Count(i => i.Status == DownloadStatus.Pending)</MudChip>
+        <MudChip T="string" Color="Color.Error" Size="Size.Small">Failed: @Items.Count(i => i.Status == DownloadStatus.Failed)</MudChip>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter] public string SourceUri { get; set; } = "";
+    [Parameter] public DownloadType DownloadType { get; set; }
+    [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
+}

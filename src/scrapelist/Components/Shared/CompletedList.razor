@@ -1,0 +1,42 @@
+@using Scrapelist.Models
+
+@if (Items.Count > 0)
+{
+    <MudPaper Class="pa-4 mb-3" Elevation="1" Style="border-left: 4px solid var(--mud-palette-success);">
+        <MudText Typo="Typo.subtitle1" Color="Color.Success" Class="mb-2">
+            Completed (@Items.Count)
+        </MudText>
+        <MudList T="string" Dense="true">
+            @if (Items.Count > 10)
+            {
+                <MudListItem T="string">
+                    <MudText Typo="Typo.caption" Style="opacity: 0.5;">
+                        ... and @(Items.Count - 10) more (showing last 10)
+                    </MudText>
+                </MudListItem>
+            }
+            @foreach (var item in Items.TakeLast(10))
+            {
+                <MudListItem T="string" Icon="@GetIcon(item)" IconColor="Color.Success">
+                    <MudText Typo="Typo.body2" Color="Color.Success">
+                        @GetItemText(item)
+                    </MudText>
+                </MudListItem>
+            }
+        </MudList>
+    </MudPaper>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<DownloadItem> Items { get; set; } = [];
+
+    private static string GetIcon(DownloadItem item) =>
+        item.Status == DownloadStatus.Skipped ? Icons.Material.Filled.SkipNext : Icons.Material.Filled.CheckCircle;
+
+    private static string GetItemText(DownloadItem item)
+    {
+        var status = item.Status == DownloadStatus.Skipped ? "[SKIP]" : "[OK]";
+        var title = item.Title.Length > 60 ? item.Title[..57] + "..." : item.Title;
+        return $"{status} {title}";
+    }
+}

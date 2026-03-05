@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using CliWrap;
 using CliWrap.Buffered;
+using Microsoft.Extensions.Logging;
 
 using CliRunner = CliWrap.Cli;
 
@@ -11,12 +12,16 @@ namespace Scrapelist.Services;
 public class FfmpegService
 {
     private readonly DebugLogger _log;
+    private readonly ILogger<FfmpegService> _logger;
     private string? _ffmpegPath;
 
-    public FfmpegService(DebugLogger log)
+    public FfmpegService(DebugLogger log, ILogger<FfmpegService> logger)
     {
         _log = log;
+        _logger = logger;
     }
+
+    public bool IsAvailable => _ffmpegPath is not null;
 
     public async Task EnsureAvailableAsync()
     {
@@ -38,13 +43,68 @@ public class FfmpegService
         }
 
         // Download
-        Console.WriteLine("FFmpeg not found. Downloading...");
+        _logger.LogInformation("FFmpeg not found. Downloading...");
         await DownloadFfmpegAsync(toolsDir);
         _ffmpegPath = localPath;
 
         if (!File.Exists(_ffmpegPath))
             throw new InvalidOperationException(
                 "FFmpeg download failed. Please install FFmpeg manually and ensure it's on your PATH.");
+    }
+
+    public async Task<bool> TryEnsureAvailableAsync()
+    {
+        try
+        {
+            await EnsureAvailableAsync();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task RemuxAsync(string videoPath, string audioPath, string outputPath,
+        string? subtitlePath = null, TimeSpan? duration = null,
+        Action<double>? onProgress = null, CancellationToken ct = default)
+    {
+        if (_ffmpegPath is null)
+            throw new InvalidOperationException("FFmpeg is not available. Call EnsureAvailableAsync first.");
+
+        var args = new List<string> { "-i", videoPath, "-i", audioPath };
+
+        if (subtitlePath is not null)
+            args.AddRange(["-i", subtitlePath]);
+
+        args.AddRange(["-c", "copy"]);
+
+        if (subtitlePath is not null)
+            args.AddRange(["-c:s", "srt"]);
+
+        args.AddRange(["-progress", "pipe:1", "-y", outputPath]);
+
+        var ffmpegArgs = args.ToArray();
+        _log.Log("FFmpeg", $"Remux: {string.Join(' ', ffmpegArgs)}");
+
+        var totalUs = duration?.TotalMicroseconds ?? 0;
+        var stderr = new StringBuilder();
+
+        var result = await CliRunner.Wrap(_ffmpegPath)
+            .WithArguments(ffmpegArgs)
+            .WithValidation(CommandResultValidation.None)
+            .WithStandardOutputPipe(PipeTarget.ToDelegate(line =>
+                ParseFfmpegProgress(line, totalUs, onProgress)))
+            .WithStandardErrorPipe(PipeTarget.ToStringBuilder(stderr))
+            .ExecuteAsync(ct);
+
+        if (result.ExitCode != 0)
+        {
+            _log.Log("FFmpeg", $"Remux failed (exit {result.ExitCode}): {stderr}");
+            throw new InvalidOperationException(
+                $"FFmpeg remux failed (exit code {result.ExitCode}): {stderr}");
+        }
+        _log.Log("FFmpeg", $"Remux complete: {outputPath}");
     }
 
     public async Task TranscodeAudioAsync(string inputPath, string outputPath,
@@ -182,7 +242,7 @@ public class FfmpegService
         return Path.Combine(toolsDir, exe);
     }
 
-    private static async Task DownloadFfmpegAsync(string toolsDir)
+    private async Task DownloadFfmpegAsync(string toolsDir)
     {
         Directory.CreateDirectory(toolsDir);
 
@@ -216,16 +276,16 @@ public class FfmpegService
         var tempFile = Path.Combine(toolsDir, "ffmpeg-download.tmp");
         try
         {
-            Console.Write("  Downloading FFmpeg... ");
+            _logger.LogInformation("Downloading FFmpeg...");
             await using var downloadStream = await httpClient.GetStreamAsync(downloadUrl);
             await using var fileStream = File.Create(tempFile);
             await downloadStream.CopyToAsync(fileStream);
             fileStream.Close();
-            Console.WriteLine("done.");
+            _logger.LogInformation("FFmpeg download complete.");
 
-            Console.Write("  Extracting... ");
+            _logger.LogInformation("Extracting FFmpeg...");
             await ExtractFfmpegAsync(tempFile, toolsDir, archiveEntryName);
-            Console.WriteLine("done.");
+            _logger.LogInformation("FFmpeg extraction complete.");
         }
         finally
         {
