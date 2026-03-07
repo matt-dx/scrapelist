@@ -25,18 +25,18 @@
                     }
                 </MudSelect>
             </MudItem>
+            <MudItem xs="12" sm="6">
             @if (_type != DownloadType.Audio)
             {
-                <MudItem xs="12" sm="6">
-                    <MudSelect @bind-Value="_codec" Label="Video Codec" Variant="Variant.Outlined"
-                               Disabled="@_isAndroid">
-                        @foreach (var c in Enum.GetValues<VideoCodec>())
-                        {
-                            <MudSelectItem Value="c">@c</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudItem>
+                <MudSelect @bind-Value="_codec" Label="Video Codec" Variant="Variant.Outlined"
+                            Disabled="@_isAndroid">
+                    @foreach (var c in Enum.GetValues<VideoCodec>())
+                    {
+                        <MudSelectItem Value="c">@c</MudSelectItem>
+                    }
+                </MudSelect>
             }
+            </MudItem>
             <MudItem xs="12" sm="4">
                 <MudNumericField @bind-Value="_retries" Label="Retries" Min="1" Max="10"
                                  Variant="Variant.Outlined" />

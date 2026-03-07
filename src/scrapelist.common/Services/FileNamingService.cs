@@ -9,9 +9,14 @@ public class FileNamingService
 
     public string GetFileName(DownloadItem item, string extension, bool indexed)
     {
-        var name = indexed
-            ? $"[{item.PlaylistIndex}] - {item.ChannelName} - {item.Title}"
-            : $"{item.ChannelName} - {item.Title}";
+        var name = string.Join(
+            " - ",
+            indexed ? $"{item.PlaylistIndex:D2}" : null,
+            item.ChannelName,
+            item.Title
+                .Replace($"{item.ChannelName} - ", "")
+                .Replace($" - {item.ChannelName}", "")
+        );
 
         name = Sanitize(name);
 
