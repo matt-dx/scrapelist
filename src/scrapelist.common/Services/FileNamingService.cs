@@ -1,5 +1,5 @@
 using Scrapelist.Models;
-
+using Scrapelist.Extensions;
 namespace Scrapelist.Services;
 
 public class FileNamingService
@@ -7,16 +7,20 @@ public class FileNamingService
     private static readonly char[] InvalidChars = Path.GetInvalidFileNameChars();
     private const int MaxFileNameLength = 200;
 
-    public string GetFileName(DownloadItem item, string extension, bool indexed)
+    public static string GetFileName(DownloadItem item, string extension, bool indexed)
     {
-        var name = string.Join(
-            " - ",
-            indexed ? $"{item.PlaylistIndex:D2}" : null,
-            item.ChannelName,
-            item.Title
+        List<string?> parts =
+        [
+            indexed ? $"{item?.PlaylistIndex:D2}" : null,
+            item?.ChannelName,
+            item?.Title
                 .Replace($"{item.ChannelName} - ", "")
                 .Replace($" - {item.ChannelName}", "")
-        );
+        ];
+
+        var name = string.Join(
+            " - ",
+            parts.RemoveNulls());
 
         name = Sanitize(name);
 
@@ -26,7 +30,7 @@ public class FileNamingService
         return $"{name}.{extension}";
     }
 
-    public string GetPlaylistFileName(string playlistTitle)
+    public static string GetPlaylistFileName(string playlistTitle)
     {
         var name = $"{Sanitize(playlistTitle)}";
 
@@ -36,7 +40,7 @@ public class FileNamingService
         return $"# {name}.m3u";
     }
 
-    public string GetPartFileName(string fileName)
+    public static string GetPartFileName(string fileName)
     {
         return $"{fileName}.part";
     }

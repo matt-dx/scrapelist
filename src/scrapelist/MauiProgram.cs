@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using Scrapelist.Services;
+using CommunityToolkit.Maui;
 
 namespace Scrapelist.Maui;
 
@@ -11,6 +12,7 @@ public static class MauiProgram
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
+            .UseMauiCommunityToolkit()
             .ConfigureFonts(fonts =>
             {
                 fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");

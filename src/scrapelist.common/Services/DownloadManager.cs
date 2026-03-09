@@ -380,7 +380,7 @@ public class DownloadManager
                     if (captionTrack is not null)
                     {
                         var subtitlePath = Path.Combine(outputDir,
-                            _naming.GetPartFileName($"{item.VideoFilePath}.srt"));
+                            FileNamingService.GetPartFileName($"{item.VideoFilePath}.srt"));
                         await _youtube.DownloadCaptionAsync(captionTrack, subtitlePath, ct);
                         transcodeTask = transcodeTask with { SubtitlePath = subtitlePath };
                         _log.Log("Download", $"Subtitles downloaded ({captionTrack.Language.Name}): {item.Title}");
@@ -428,7 +428,7 @@ public class DownloadManager
         var finalPath = Path.Combine(outputDir, item.AudioFilePath!);
         // Use proper .m4a extension for transcode output so FFmpeg can determine format
         var rawPath = Path.Combine(outputDir, $"~transcoding~{Path.GetFileName(item.AudioFilePath!)}");
-        var partPath = Path.Combine(outputDir, _naming.GetPartFileName(item.AudioFilePath!));
+        var partPath = Path.Combine(outputDir, FileNamingService.GetPartFileName(item.AudioFilePath!));
 
         if (!File.Exists(finalPath))
         {
@@ -464,8 +464,8 @@ public class DownloadManager
         var audioStream = _youtube.GetBestAudioStream(manifest);
 
         var finalPath = Path.Combine(outputDir, item.VideoFilePath!);
-        var videoPartPath = Path.Combine(outputDir, _naming.GetPartFileName($"{item.VideoFilePath}.video"));
-        var audioPartPath = Path.Combine(outputDir, _naming.GetPartFileName($"{item.VideoFilePath}.audio"));
+        var videoPartPath = Path.Combine(outputDir, FileNamingService.GetPartFileName($"{item.VideoFilePath}.video"));
+        var audioPartPath = Path.Combine(outputDir, FileNamingService.GetPartFileName($"{item.VideoFilePath}.audio"));
         // Use proper .m4v extension for mux output so FFmpeg can determine format
         var muxPath = Path.Combine(outputDir, $"~transcoding~{Path.GetFileName(item.VideoFilePath!)}");
 
@@ -588,7 +588,7 @@ public class DownloadManager
         if (_options.Type is DownloadType.Audio or DownloadType.Both)
         {
             var audioExt = _options.Codec == VideoCodec.None ? "webm" : "m4a";
-            item.AudioFilePath = _naming.GetFileName(item, audioExt, _options.Indexed);
+            item.AudioFilePath = FileNamingService.GetFileName(item, audioExt, _options.Indexed);
         }
 
         if (_options.Type is DownloadType.Video or DownloadType.Both)
@@ -599,7 +599,7 @@ public class DownloadManager
                 VideoCodec.X265 => "mkv",
                 _ => "m4v"
             };
-            item.VideoFilePath = _naming.GetFileName(item, videoExt, _options.Indexed);
+            item.VideoFilePath = FileNamingService.GetFileName(item, videoExt, _options.Indexed);
         }
     }
 
@@ -609,7 +609,7 @@ public class DownloadManager
             return;
 
         var outputDir = Path.GetFullPath(_options.OutputDirectory);
-        var playlistFileName = _naming.GetPlaylistFileName(_playlistInfo.Title);
+        var playlistFileName = FileNamingService.GetPlaylistFileName(_playlistInfo.Title);
         var playlistPath = Path.Combine(outputDir, playlistFileName);
         await _playlistWriter.WriteAsync(playlistPath, _allItems, _options.Type);
     }
