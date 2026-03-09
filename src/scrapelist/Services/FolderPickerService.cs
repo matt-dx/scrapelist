@@ -9,14 +9,20 @@ public static class FolderPickerService
 #if ANDROID
         // Request storage permissions
         var statusRead = await Permissions.CheckStatusAsync<Permissions.StorageRead>();
+        var statusMedia = await Permissions.CheckStatusAsync<Permissions.Media>();
         var statusWrite = await Permissions.CheckStatusAsync<Permissions.StorageWrite>();
 
-        if (statusRead != PermissionStatus.Granted || statusWrite != PermissionStatus.Granted)
+        if (statusRead != PermissionStatus.Granted 
+        || statusMedia != PermissionStatus.Granted 
+        || statusWrite != PermissionStatus.Granted)
         {
             statusRead = await Permissions.RequestAsync<Permissions.StorageRead>();
+            statusMedia = await Permissions.RequestAsync<Permissions.Media>();
             statusWrite = await Permissions.RequestAsync<Permissions.StorageWrite>();
 
-            if (statusRead != PermissionStatus.Granted || statusWrite != PermissionStatus.Granted)
+            if (statusRead != PermissionStatus.Granted 
+            || statusMedia != PermissionStatus.Granted 
+            || statusWrite != PermissionStatus.Granted)
             {
                 // Permission denied - show error or return null
                 await Application.Current!.Windows[0].Page!.DisplayAlertAsync(
