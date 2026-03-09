@@ -15,6 +15,20 @@ else
                    DownloadType="@Session.Manager.DownloadType"
                    Items="@Session.Manager.AllItems" />
 
+    @if (_isInitializing)
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            Fetching video info...
+        </MudAlert>
+    }
+    else if (_initError is not null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mt-4">@_initError</MudAlert>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Class="mt-2"
+                   OnClick='() => Nav.NavigateTo("/")'>Back to Options</MudButton>
+    }
+
     <ActiveDownloads Items="@GetItemsByStatus(DownloadStatus.Downloading)" />
     <TranscodingList Items="@GetItemsByStatus(DownloadStatus.Transcoding)" />
     <PendingList Items="@GetItemsByStatus(DownloadStatus.Pending)" />
@@ -32,12 +46,15 @@ else
 @code {
     private CancellationTokenSource? _cts;
     private Timer? _timer;
+    private bool _isInitializing;
+    private string? _initError;
 
     protected override async Task OnInitializedAsync()
     {
         if (Session.Manager is null) return;
 
         _cts = new CancellationTokenSource();
+        _isInitializing = true;
 
         // 250ms UI refresh timer (same pattern as CLI App.razor)
         _timer = new Timer(async _ =>
@@ -48,15 +65,17 @@ else
         try
         {
             await Session.Manager.InitializeAsync(_cts.Token);
+            _isInitializing = false;
             _ = Task.Run(async () =>
             {
                 try { await Session.Manager.RunAsync(_cts.Token); }
                 catch (OperationCanceledException) { }
             });
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Initialization error will be visible via Manager state
+            _isInitializing = false;
+            _initError = ex.Message;
         }
     }
 

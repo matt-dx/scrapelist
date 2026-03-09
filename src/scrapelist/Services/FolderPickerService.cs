@@ -17,6 +17,7 @@ public static class FolderPickerService
                 var intent = new Android.Content.Intent(
                     Android.Provider.Settings.ActionManageAppAllFilesAccessPermission,
                     Android.Net.Uri.Parse($"package:{Android.App.Application.Context.PackageName}"));
+                intent.AddFlags(Android.Content.ActivityFlags.NewTask);
                 Android.App.Application.Context.StartActivity(intent);
                 await Application.Current!.Windows[0].Page!.DisplayAlertAsync(
                     "Permission Required",
