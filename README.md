@@ -1,6 +1,6 @@
 # scrapelist
 
-`scrapelist` downloads YouTube videos or playlists, transcodes them with FFmpeg, and writes ready-to-play `.m3u` playlists.
+`scrapelist` downloads YouTube videos, playlists, or channels, transcodes them with FFmpeg, and writes ready-to-play `.m3u` playlists.
 
 Two interfaces are available:
 
@@ -64,7 +64,10 @@ scrapelist <uri> [options]
 
 ### Arguments
 
-- `uri` (required): YouTube video or playlist URL
+- `uri` (required): YouTube video, playlist, or channel URL
+  - Channel URLs (`/@handle`, `/channel/UC...`, `/c/name`, `/user/name`) can target a tab:
+    `/videos`, `/shorts`, `/streams`, `/releases`, or `/playlists`. A bare channel URL downloads all uploads.
+  - `/releases` and `/playlists` combine every listed playlist into one queue (duplicates removed).
 
 ### Options
 
