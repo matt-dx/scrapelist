@@ -12,7 +12,7 @@ public static class CliParser
 
         var uriArgument = new Argument<string>("uri")
         {
-            Description = "YouTube video or playlist URL"
+            Description = "YouTube video, playlist, or channel URL"
         };
 
         var typeOption = new Option<string>("--type")
@@ -63,7 +63,7 @@ public static class CliParser
             DefaultValueFactory = _ => false
         };
 
-        var rootCommand = new RootCommand("scrapelist - YouTube video/playlist downloader")
+        var rootCommand = new RootCommand("scrapelist - YouTube video/playlist/channel downloader")
         {
             uriArgument,
             typeOption,

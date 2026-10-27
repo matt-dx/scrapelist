@@ -7,7 +7,7 @@ public class FileNamingService
     private static readonly char[] InvalidChars = Path.GetInvalidFileNameChars();
     private const int MaxFileNameLength = 200;
 
-    public static string GetFileName(DownloadItem item, string extension, bool indexed)
+    public static string GetFileName(DownloadItem item, string extension, bool indexed, int copy = 1)
     {
         List<string?> parts =
         [
@@ -26,6 +26,9 @@ public class FileNamingService
 
         if (name.Length > MaxFileNameLength)
             name = name[..MaxFileNameLength];
+
+        if (copy > 1)
+            name = $"{name} ({copy})";
 
         return $"{name}.{extension}";
     }

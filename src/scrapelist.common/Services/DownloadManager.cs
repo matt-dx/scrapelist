@@ -71,8 +71,10 @@ public class DownloadManager
         var outputDir = Path.GetFullPath(_options.OutputDirectory);
         Directory.CreateDirectory(outputDir);
 
+        // Base name -> video IDs claiming it, in queue order (case-insensitive, as on Windows/Android filesystems)
+        var nameOwners = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in _allItems)
-            AssignFilePaths(item);
+            AssignFilePaths(item, nameOwners);
 
         // Mark items that already exist as skipped
         foreach (var item in _allItems)
@@ -373,10 +375,13 @@ public class DownloadManager
                     VideoFinalPath = videoPaths.FinalPath
                 };
 
-                // Download subtitles (non-blocking — skip if unavailable or on error)
+                // Download subtitles (non-blocking — skip if unavailable or on error).
+                // Skipped when the final file exists, since the transcoder won't mux or clean them up.
                 try
                 {
-                    var captionTrack = await _youtube.GetBestCaptionTrackAsync(item.VideoId, ct);
+                    var captionTrack = File.Exists(videoPaths.FinalPath)
+                        ? null
+                        : await _youtube.GetBestCaptionTrackAsync(item.VideoId, ct);
                     if (captionTrack is not null)
                     {
                         var subtitlePath = Path.Combine(outputDir,
@@ -583,12 +588,25 @@ public class DownloadManager
         }
     }
 
-    private void AssignFilePaths(DownloadItem item)
+    private void AssignFilePaths(DownloadItem item, Dictionary<string, List<string>> nameOwners)
     {
+        // Different videos with the same title get " (2)", " (3)"... so later versions aren't dropped
+        // as "already exists". The same video appearing twice keeps the same name.
+        var baseName = FileNamingService.GetFileName(item, "", _options.Indexed);
+        if (!nameOwners.TryGetValue(baseName, out var owners))
+            nameOwners[baseName] = owners = [];
+        var occurrence = owners.IndexOf(item.VideoId);
+        if (occurrence < 0)
+        {
+            owners.Add(item.VideoId);
+            occurrence = owners.Count - 1;
+        }
+        var copy = occurrence + 1;
+
         if (_options.Type is DownloadType.Audio or DownloadType.Both)
         {
             var audioExt = _options.Codec == VideoCodec.None ? "webm" : "m4a";
-            item.AudioFilePath = FileNamingService.GetFileName(item, audioExt, _options.Indexed);
+            item.AudioFilePath = FileNamingService.GetFileName(item, audioExt, _options.Indexed, copy);
         }
 
         if (_options.Type is DownloadType.Video or DownloadType.Both)
@@ -599,7 +617,7 @@ public class DownloadManager
                 VideoCodec.X265 => "mkv",
                 _ => "m4v"
             };
-            item.VideoFilePath = FileNamingService.GetFileName(item, videoExt, _options.Indexed);
+            item.VideoFilePath = FileNamingService.GetFileName(item, videoExt, _options.Indexed, copy);
         }
     }
 
