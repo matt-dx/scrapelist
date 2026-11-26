@@ -15,8 +15,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="RazorConsole.Core" Version="0.3.0-alpha.20251207-3e3336f" />
-    <PackageReference Include="System.CommandLine" Version="2.0.0-beta5.25306.1" />
+    <PackageReference Include="RazorConsole.Core" Version="0.7.0" />
+    <PackageReference Include="System.CommandLine" Version="3.0.0" />
   </ItemGroup>
 
 </Project>
