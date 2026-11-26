@@ -33,6 +33,7 @@ jobs:
           -c Release
           -r win-x64
           --self-contained true
+          -p:SkipAndroid=true
           -p:WindowsPackageType=None
           -p:WindowsAppSDKSelfContained=true
           -p:ApplicationDisplayVersion=1.0.${{ github.run_number }}
