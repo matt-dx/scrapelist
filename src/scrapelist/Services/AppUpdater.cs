@@ -19,6 +19,22 @@ public sealed class AppUpdater
     public string? Error { get; private set; }
     public event Action? Changed;
 
+    public AppUpdater()
+    {
+#if WINDOWS
+        // Surface a failure reported by the helper script of a previous update attempt.
+        try
+        {
+            if (File.Exists(ErrorLogPath))
+            {
+                Error = File.ReadAllText(ErrorLogPath).Trim();
+                File.Delete(ErrorLogPath);
+            }
+        }
+        catch { /* diagnostics only */ }
+#endif
+    }
+
     public static string AssetName =>
 #if ANDROID
         UpdateChecker.AndroidAsset;
@@ -31,7 +47,6 @@ public sealed class AppUpdater
         if (Busy) return;
         try
         {
-            Error = null;
             if (!Version.TryParse(AppInfo.Current.VersionString, out var current)) return;
             Available = await _checker.CheckAsync(current, AssetName);
         }
@@ -74,6 +89,8 @@ public sealed class AppUpdater
     }
 
 #if WINDOWS
+    private static string ErrorLogPath => Path.Combine(FileSystem.AppDataDirectory, "update-error.txt");
+
     private static void InstallWindows(string zipPath, string workDir)
     {
         var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot locate running executable.");
@@ -94,8 +111,11 @@ public sealed class AppUpdater
 
         var pid = Environment.ProcessId;
         var script = Path.Combine(workDir, "apply-update.cmd");
+        var errorLog = ErrorLogPath;
+        // The script is written as UTF-8 (no BOM); switch the console code page so non-ASCII paths survive.
         File.WriteAllText(script, string.Join("\r\n",
             "@echo off",
+            "chcp 65001 >NUL",
             ":wait",
             $"tasklist /FI \"PID eq {pid}\" 2>NUL | find \"{pid}\" >NUL",
             "if not errorlevel 1 (",
@@ -103,6 +123,11 @@ public sealed class AppUpdater
             "  goto wait",
             ")",
             $"robocopy \"{staging}\" \"{appDir}\" /E /IS /IT /R:10 /W:1 >NUL",
+            // robocopy exit codes >= 8 mean at least one file failed to copy.
+            "if %errorlevel% GEQ 8 (",
+            $"  echo Update to the files in \"{appDir}\" failed (robocopy exit code %errorlevel%). The installation may be incomplete. Close Scrapelist and copy the contents of \"{staging}\" over it manually, or reinstall from the latest release. > \"{errorLog}\"",
+            "  exit /b 1",
+            ")",
             $"start \"\" \"{exe}\"",
             ""));
 
@@ -122,7 +147,8 @@ public sealed class AppUpdater
         var ctx = Android.App.Application.Context;
 
         // "Install unknown apps" is a per-app toggle the user must enable once.
-        if (!ctx.PackageManager!.CanRequestPackageInstalls())
+        // Per-app install permission only exists on API 26+; older devices go straight to the installer.
+        if (OperatingSystem.IsAndroidVersionAtLeast(26) && !ctx.PackageManager!.CanRequestPackageInstalls())
         {
             var settings = new Android.Content.Intent(
                 Android.Provider.Settings.ActionManageUnknownAppSources,

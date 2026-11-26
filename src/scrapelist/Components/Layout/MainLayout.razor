@@ -24,11 +24,11 @@
             </MudButton>
         }
     </MudAppBar>
-    @if (Updater.Error is { } err)
-    {
-        <MudAlert Severity="Severity.Error" Dense="true" ShowCloseIcon="true">@err</MudAlert>
-    }
     <MudMainContent>
+        @if (Updater.Error is { } err)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true">@err</MudAlert>
+        }
         <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4 pb-8">
             @Body
         </MudContainer>
