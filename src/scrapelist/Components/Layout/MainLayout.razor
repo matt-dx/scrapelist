@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@implements IDisposable
+@inject Scrapelist.Maui.Services.AppUpdater Updater
 
 <MudThemeProvider IsDarkMode="true" />
 <MudPopoverProvider />
@@ -8,10 +10,41 @@
 <MudLayout>
     <MudAppBar Elevation="1">
         <MudText Typo="Typo.h5" Class="ml-3">Scrapelist</MudText>
+        <MudSpacer />
+        @if (Updater.Busy)
+        {
+            <MudProgressLinear Value="@(Updater.Progress * 100)" Color="Color.Info" Style="width: 120px;" Class="mr-3" />
+        }
+        else if (Updater.Available is { } update)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Info" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.SystemUpdateAlt"
+                       OnClick="Updater.InstallAsync">
+                Update to @update.Version
+            </MudButton>
+        }
     </MudAppBar>
     <MudMainContent>
+        @if (Updater.Error is { } err)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true">@err</MudAlert>
+        }
         <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4 pb-8">
             @Body
         </MudContainer>
     </MudMainContent>
 </MudLayout>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        Updater.Changed += OnUpdaterChanged;
+#if !DEBUG
+        await Updater.CheckAsync();
+#endif
+    }
+
+    private void OnUpdaterChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Updater.Changed -= OnUpdaterChanged;
+}

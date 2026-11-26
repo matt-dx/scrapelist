@@ -34,6 +34,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<FfmpegService>();
         builder.Services.AddSingleton<FileNamingService>();
         builder.Services.AddSingleton<PlaylistWriter>();
+        builder.Services.AddSingleton<Scrapelist.Maui.Services.AppUpdater>();
         builder.Services.AddLogging();
 
         return builder.Build();
