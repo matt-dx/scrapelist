@@ -8,9 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="YoutubeExplode" Version="6.6.2" />
-    <PackageReference Include="CliWrap" Version="3.8.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="YoutubeExplode" Version="6.6.3" />
+    <PackageReference Include="CliWrap" Version="3.10.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="11.0.0" />
   </ItemGroup>
 
   <ItemGroup>

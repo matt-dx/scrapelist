@@ -1,5 +1,4 @@
 using System.CommandLine;
-using System.CommandLine.Parsing;
 using Scrapelist.Models;
 
 namespace Scrapelist.Cli;
@@ -110,8 +109,7 @@ public static class CliParser
             result = new DownloadOptions(uri, downloadType, retries, parallel, indexed, timeout, output, codec, debug);
         });
 
-        var config = new CommandLineConfiguration(rootCommand);
-        config.Invoke(args);
+        rootCommand.Parse(args).Invoke();
         return result;
     }
 }
